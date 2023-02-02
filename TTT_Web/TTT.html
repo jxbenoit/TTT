@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='UTF-8'>
+  <title>Tic-Tac-Toe</title>
+  <style>
+    * {
+      -webkit-box-sizing:border-box;
+      -moz-box-sizing:border-box;
+      box-sizing:border-box;
+    }
+    html {
+      height: 100%;
+      width: 100%;
+    }
+    body {
+      height: 100%;
+      margin: 0;
+      background-color: #ffffff;
+    }
+    body > * {
+      text-align:center;
+      margin:auto;
+      font-family:Arial,Helvetica;
+    }
+    h2, h3, h4 {
+      margin-bottom:0em;
+      margin-top:0em;
+    }
+    #header {
+      padding-top:1em;
+      height:54px;
+      border-bottom:2px solid #777;
+      -webkit-box-shadow: 3px 3px 5px 6px #777; /*Safari 3-4, iOS 4.0.2 - 4.2, Android 2.3+*/
+      -moz-box-shadow:    3px 3px 5px 6px #777; /*Firefox 3.5 - 3.6*/
+      box-shadow:         3px 3px 5px 6px #777; /*Opera 10.5, IE 9, Firefox 4+, Chrome 6+, iOS 5*/
+    }
+    #board_area table {
+      /*Don't draw outer border of table.*/
+      margin: 2em auto 0 auto;
+      border-collapse: collapse;
+      border-style: hidden;
+    }
+    #board_area table td {
+      position:relative;
+      padding: 0; /*0.5rem; */
+      border: 10px solid orange;
+      width: 10em;
+      height: 10em;
+    }
+    #board_area table td div {
+      font-family: Arial,Helvetica,sans-serif;
+      font-size:100pt;
+    }
+    .Side1 {
+      color: mediumblue;
+    }
+    .Side2 {
+      color: firebrick;
+    }
+    .Slash {
+      display:none;
+      position: absolute;
+      margin-top:-300%;
+      left:45%;
+      index:1;
+      width: 10pt;
+      height: 285%;
+      background-color: blue;
+    }
+    .Slash_Side1 {
+      background-color: darkblue;
+    }
+    .Slash_Side2 {
+      background-color: darkred;
+    }
+    .Slash_Row {
+      margin-top: 0;
+      margin-left:-250%;
+      width: 350pt;
+      height: 10pt;
+    }
+    .Slash_Diag1 {
+      top:82%;
+      left:-58%;
+      height: 330%;
+      transform: rotate(-45deg);
+    }
+    .Slash_Diag2 {
+      top:82%;
+      left:-60%;
+      height: 330%;
+      transform: rotate(45deg);
+    }
+    #scoreboard {
+      margin-top:30px;
+      width: 50%;
+      border: solid 1px black;
+      background-color: darkolivegreen;
+      color:white;
+    }
+    #scoreboard td {
+      border: solid 1px white;
+      width:10%;
+    }
+    #play_again_btn {
+      display: none;
+    }
+    #reset_scores_btn {
+      display: none;
+    }
+    .btn {
+      margin: auto 3% auto 3%;
+      /*margin:4px 2px 4px 2px;*/
+      width:8%;
+      padding:2px;
+      font-size:13pt;
+      color:yellow;
+      background-color:DodgerBlue;
+      border-radius:7px;
+      -webkit-box-shadow: 1px 1px 1px 1px #777; /*Safari 3-4, iOS 4.0.2 - 4.2, Android 2.3+*/
+      -moz-box-shadow:    1px 1px 1px 1px #777; /*Firefox 3.5 - 3.6*/
+      box-shadow:         1px 1px 1px 1px #777; /*Opera 10.5, IE 9, Firefox 4+, Chrome 6+, iOS 5*/
+    }
+    .score {
+      color:yellow;
+    }
+    #messages {
+      padding-top:20px;
+      font-size:14pt;
+      color:darkred;
+    }
+    #btns {
+      margin-top:10pt;
+      width:100%;
+      height:36pt;
+    }
+  </style>
+  <script src="Nodes.js"></script>
+  <script type='text/javascript'>
+    function Node( N ) {
+      this.Id = N[0];
+      this.Grid = N[1];
+      this.Status = N[2];
+      this.NWins = N[3];
+      this.NTies = N[4];
+      this.PathComplete = (N[5]=='t' ? true : false);
+      this.NextNodeIds = N[6];
+      this.NUntried = null;
+      this.Next = [];
+      this.NNext = 0;
+    } //Node
+
+    const BLANK = '.';
+    const GRID_SIZE = 9;
+    const SIDE1 = 'X';
+    const SIDE2 = 'O';
+    const NONE = 0, LOSS = 'L', WIN = 'W', TIE = 'T', MIXED = 'M';
+    var Root, CurrState, PrevState, Nodes = [], Turn;
+    var NGamesPlayed = 0, PlayerScore = 0, ComputerScore = 0;
+    var PlayersTurn = true, Side1Won = false, Side2Won = false;
+    var Grid = [];
+    var SlashDiv = null;
+
+    //-------------------------------------------------------------------------
+    window.onload = function() {
+      //Rewrite NodesJSON as an actual node graph.
+      for( var i in NodesJSON.Nodes ) {
+        var n = new Node( NodesJSON.Nodes[i] );
+
+        n.NUntried = 0;
+        for( var i = 0; i < GRID_SIZE; i++ )
+          if( this.Grid[i] == BLANK )
+            n.NUntried++;
+
+        Nodes.push( n );
+      }
+
+      //Connect up the node links.
+      for( let i in Nodes ) {
+        for( let j in Nodes[i].NextNodeIds ) {
+          var k = 0;
+          while( k < Nodes.length && Nodes[k].Id != Nodes[i].NextNodeIds[j] )
+            k++;
+          if( k < Nodes.length ) {
+            Nodes[i].Next.push( Nodes[k] );
+            Nodes[i].NNext++;
+          }
+        }
+      }
+
+      //Update scoreboard, message area here.
+      UpdateScoreboard();
+      SetMessage( "Want to play Tic-Tac-Toe? I am unbeatable!<br />" +
+                  "Click in any space in the board above." );
+
+      //Initialize root and current state.
+      Root = Nodes[0];
+
+      ResetBoard();
+    };//Onload
+
+    //-------------------------------------------------------------------------
+    function ProcessMove( Cell ) {
+      console.log( "ProcessMove 1:" );
+      let WinType = 0;
+      if( PlayersTurn ) {
+        let content = Cell.innerHTML;
+        if( content != SIDE1 && content != SIDE2 ) {
+          PlayersTurn = false;
+          Turn++;
+          Cell.innerHTML = SIDE1;
+          Cell.className = "Side1";
+          let row = Cell.id.substring( 5, 6 );
+          let col = Cell.id.substring( 6, 7 );
+          SetPlayerMove( row, col, SIDE1, Root );
+          console.log( "ProcessMove 2: Back from SetPlayerMove: " +
+                       "CurrState is Node #" + CurrState.Id );
+          WinType = CheckWin( SIDE1 );
+          if( WinType )
+            Side1Won = true;
+          else if( Turn < GRID_SIZE ) {
+            Turn++;
+            GetAIMove( SIDE2, Root );
+
+            ShowGrid();
+
+            WinType = CheckWin( SIDE2 );
+            if( WinType )
+              Side2Won = true;
+          }
+
+          if( Side1Won ) {
+            CurrState.SetStatus( LOSS );
+            //Set previous (parent) state to loss as well.
+            PrevState.SetStatus( LOSS );
+            DisplayWinningSlash( WinType, SIDE1 );
+            NGamesPlayed++;
+            PlayerScore++;
+            UpdateScoreboard();
+
+            SetMessage( "I can't believe you won!<br />" +
+                        "But it won't happen again! " +
+                        "Let's play another game." );
+            ShowButtons();
+          }
+          else if( Side2Won ) {
+            CurrState.SetStatus( WIN );
+            DisplayWinningSlash( WinType, SIDE2 );
+            NGamesPlayed++;
+            ComputerScore++;
+            UpdateScoreboard();
+
+            SetMessage( "Haha, I won!<br />" +
+                        "You can't beat me, but we can play another " +
+                        "game if you want." );
+            ShowButtons();
+          }
+          else if( Turn == GRID_SIZE ) {  //Tie
+            CurrState.SetStatus( TIE );
+            NGamesPlayed++;
+            UpdateScoreboard();
+
+            SetMessage( "It's a tie! No one wins!" );
+            ShowButtons();
+          }
+          else {
+            PlayersTurn = true;
+          }
+        }
+      } 
+    } //ProcessMove
+
+    //-------------------------------------------------------------------------
+    function SetPlayerMove( Row, Col, Marker, Root ) {
+      let side_len = Math.sqrt( GRID_SIZE );
+      let index = Row * side_len + parseInt(Col);
+      Grid[index] = Marker;
+      console.log( "SetPlayerMove 1: Grid: " + PrintGrid(Grid, GRID_SIZE) +
+                   " row=" + Row + " col=" + Col +
+                   " " + index );
+
+      CurrState.UpdateStatus();
+
+      console.log( "SetPlayerMove 2: Grid: " + PrintGrid(Grid, GRID_SIZE) +
+                   " row=" + Row + " col=" + Col );
+      let new_p = CurrState.Find( Grid, GRID_SIZE );
+
+      //If no matching state found; try searching from root of node tree.
+      if( new_p == null ) {
+        new_p = Root.Find( Grid, GRID_SIZE, true );
+
+        if( new_p != null ) {
+          CurrState.AddAsNonChildNode( new_p );  //Add link to this node
+        }
+      }
+
+      //If still no matching state found; create one.
+      if( new_p == null ) {
+        PrevState = CurrState;
+        CurrState = CurrState.AddAsChildNode();
+      }
+      else {
+        PrevState = CurrState;
+        CurrState = new_p;
+      }
+
+      CurrState.UpdateStatus();
+      console.log( "SetPlayerMove 3: CurrState is Node #" + CurrState.Id );
+    } //SetPlayerMove
+
+    /*-------------------------------------------------------------------------
+      CheckWin
+        Returns:
+          0 - if no win
+          1 - if first row across
+          2 - if second row across
+          3 - if third row across
+          4 - if first col down
+          5 - if second col down
+          6 - if third col down
+          7 - if diag from upper left to bottom right
+          8 - if diag from upper right to bottom left
+    */
+    function CheckWin( Marker ) {
+      let side_len = Math.sqrt( GRID_SIZE );
+
+      //Check rows.
+      for( let i = 0; i < side_len; i++ ) {
+        let j = 0;
+        for( ; j < side_len && Grid[i*side_len+j] == Marker; j++ );
+        if( j == side_len ) return i + 1;
+      }
+
+      //Check columns.
+      for( let j = 0; j < side_len; j++ ) {
+        let i = 0;
+        for( ; i < side_len && Grid[i*side_len+j] == Marker; i++ );
+        if( i == side_len ) return j + 1 + 3;
+      }
+
+      //Check diagonals.
+      let x = 0;
+      for( ; x < side_len && Grid[x*side_len+x] == Marker; x++ ) {}
+      if( x == side_len ) return 7;
+
+      x = side_len - 1;
+      for( ; x >= 0 && Grid[x*side_len+(side_len-1-x)] == Marker; x-- ) {}
+      if( x < 0 ) return 8;
+
+      return 0;
+    } //CheckWin
+
+    //-------------------------------------------------------------------------
+    function GetAIMove( Marker, Root ) {
+      console.log( "GetAIMove 1: CurrState is Node #" +
+                   CurrState.GetId() );
+      let new_p = CurrState.Find( Grid, GRID_SIZE );
+
+      //If no matching state found; try searching from root of node tree.
+      if( new_p == null ) {
+        new_p = Root.Find( Grid, GRID_SIZE, true );
+
+        if( new_p != null )
+          CurrState.AddAsNonChildNode( new_p );  //Add link to this node
+      }
+      console.log( "GetAIMove 2: CurrState is Node #" +
+                   CurrState.GetId() );
+
+      //If still no matching state found; create one.
+      if( new_p == null ) {
+        PrevState = CurrState;
+        CurrState = CurrState.AddAsChildNode();
+      }
+      else {
+        PrevState = CurrState;
+        CurrState = new_p;
+      }
+      console.log( "GetAIMove 3: CurrState is Node #" +
+                   CurrState.GetId() );
+
+      PrevState = CurrState;
+      CurrState = CurrState.ChooseMove( Marker );
+      console.log( "GetAIMove 4: Moving CurrState to Node #" +
+                   CurrState.GetId() );
+
+      //Copy CurrState to main grid.
+      for( let i = 0; i < GRID_SIZE; i++ )
+        Grid[i] = CurrState.Grid[i];
+
+      console.log( "GetAIMove 5: New grid: " + PrintGrid(Grid, GRID_SIZE) );
+    } //GetAIMove
+
+    //-------------------------------------------------------------------------
+    Node.prototype.UpdateStatus = function() {
+      //If status is already a loss, keep it that way. A loss is a loss.
+      //Otherwise, the algorithm may pursue incomplete paths down this path,
+      //hoping for a win.
+      if( this.Status == LOSS ) {
+        this.PathComplete = true;
+        return;
+      }
+
+      //Count spaces left.
+      let nblanks = 0;
+      for( let i = 0; i < GRID_SIZE; i++ )
+        if( this.Grid[i] == BLANK )
+          nblanks++;
+  
+      //Any untried moves left?
+      this.NUntried = nblanks - this.Next.length;
+
+      let complete = true, all_subnodes_losses = true,
+          all_subnodes_wins = true, all_subnodes_ties = true;
+
+      for( let i = 0; i < this.Next.length && complete; i++ ) {
+        if( ! this.Next[i].IsPathComplete() )
+          complete = false;  //A subpath is incomplete, so this node's path is
+        else {
+          let stat = this.Next[i].GetStatus();
+          if( stat == WIN ) {
+            all_subnodes_losses = false;
+            all_subnodes_ties = false;
+          }
+          else if( stat == TIE ) {
+            all_subnodes_losses = false;
+            all_subnodes_wins = false;
+          }
+          else if( stat == LOSS ) {
+            all_subnodes_ties = false;
+            all_subnodes_wins = false;
+          }
+          else {
+            all_subnodes_ties = false;
+            all_subnodes_wins = false;
+            all_subnodes_losses = false;
+          }
+        }
+      }
+
+      this.PathComplete = (this.NUntried == 0) && complete;
+
+      if( this.PathComplete ) {
+        if( all_subnodes_losses )
+          this.SetStatus( LOSS );
+        else if( all_subnodes_wins )
+          this.SetStatus( WIN );
+        else if( all_subnodes_ties )
+          this.SetStatus( TIE );
+        else
+          this.SetStatus( MIXED );
+        }
+    } //Node.prototype.UpdateStatus
+
+    //-------------------------------------------------------------------------
+    Node.prototype.IsPathComplete = function() {
+      return this.PathComplete;
+    } //Node.prototype.IsPathComplete
+
+    //-------------------------------------------------------------------------
+    Node.prototype.SetStatus = function( Status ) {
+      this.Status = Status;
+      if( this.Status == WIN || this.Status == LOSS || this.Status == TIE ||
+          this.Status == MIXED ) {
+        this.PathComplete = true;
+        if( this.Status == WIN || this.Status == LOSS ||
+            this.Status == MIXED ) {
+          this.NUntried = 0;
+          if( this.Status == WIN )
+            this.NWins++;
+          else
+            this.NWins = 0;
+        }
+        else if( this.Status == TIE )
+          this.NTies++;
+      }
+    } //Node.prototype.SetStatus
+
+    //-------------------------------------------------------------------------
+    Node.prototype.Find = function( TestGrid, Size, Recurse ) {
+      //Check if current node matches.
+      console.log( "Node::Find 1: Comparing " + PrintGrid(TestGrid, Size) +
+                   " with " + PrintGrid(this.Grid, Size) );
+      if( this.Compare(TestGrid, Size) ) {
+        console.log( "Node::Find 2: Found match with Node #" + this.Id + "!" );
+        return this;
+      }
+
+      //Look for a match (just the next level of nodes).
+      //If no match found, return nullptr.
+      if( this.Next ) {
+        console.log( "Node::Find 3" );
+        for( let i = 0; i < this.Next.length; i++ ) {
+          console.log( "Node::Find 4: Comparing " + PrintGrid(TestGrid, Size) +
+                       " with " + PrintGrid(this.Next[i].Grid, Size) +
+                       " (Node #" + this.Next[i].Id + ")" );
+          if( this.Next[i].Compare(TestGrid, Size) ) {
+            console.log( "Node::Find 5: Found match with Node #" +
+                         this.Next[i].GetId() + "!" );
+            return this.Next[i];
+          }
+        }
+
+        //Note recursion only goes through child subnodes,
+        // not non-child subnodes.
+        if( Recurse ) {
+          for( let i = 0; i < this.Next.length; i++ ) {
+            let p = this.Next[i].Find( TestGrid, Size, true );
+            if( p != null ) {
+              console.log( "Node::Find 6: Node #" + this.Id +
+                           " Returning subnode #" << p.GetId() );
+              return p;
+            }
+          }
+        }
+      }
+  
+      return null;
+    } //Node.prototype.Find
+
+    //-------------------------------------------------------------------------
+    Node.prototype.Compare = function( TestGrid, Size ) {
+      for( let i = 0; i < Size; i++ )
+        if( TestGrid[i] != this.Grid[i] )
+          return false;
+
+      return true;
+    } //Node.prototype.Compare
+
+    //-------------------------------------------------------------------------
+    Node.prototype.GetId = function() {
+      return this.Id;
+    } //Node.prototype.GetId
+
+    //-------------------------------------------------------------------------
+    Node.prototype.AddAsNonChildNode = function( p ) {
+      this.Next[this.NNext++] = p;  
+    } //Node.prototype.AddAsNonChildNode
+
+    //-------------------------------------------------------------------------
+    Node.prototype.AddAsChildNode = function() {
+      this.Next[this.NNext++] = new Node( Grid, GRID_SIZE, this );
+
+      return this.Next[this.NNext-1];
+    } //Node.prototype.AddAsChildNode
+
+    //-------------------------------------------------------------------------
+    Node.prototype.ChooseMove = function( Marker ) {
+      let New_pNode = null;
+
+      this.UpdateStatus();
+
+      //Find move with maximum wins.
+      //Use Win bools from nodes and NWins arrays.
+      //'Bubble up' NWins from next nodes.
+      this.NWins = this.NTies = 0;
+      let max_next_nwins = 0, num_max_next_nwins = 0;
+      for( let i = 0; i < this.NNext; i++ ) {
+        this.NTies += this.Next[i].GetNumTies();
+        let next_nwins = this.Next[i].GetNumWins();
+        this.NWins += next_nwins;
+        if( next_nwins > max_next_nwins ) {
+          max_next_nwins = next_nwins;
+          num_max_next_nwins = 0;
+        }
+        else if( next_nwins == max_next_nwins )
+          num_max_next_nwins++;
+      }
+
+      //Total 'points' for this node's subpaths. If subpath:
+      //  is complete and has 0 wins  - reward 0 pts (loss or ties down path)
+      //  is complete and has >0 wins - reward 2 points for each win
+      //  is incomplete               - reward 1 pt plus
+      //                                reward 2 points for each win and 1 pt
+      //                                for each untried subsubpath
+      let npoints = this.NUntried;
+      console.log( "ChooseMove 1: In Node #" + this.Id + " " + npoints );
+      for( let i = 0; i < this.Next.length; i++ ) {
+        /*Check subsubnodes of this subnode, which are paths player decides
+          after this AI move. If any are marked as losses (inescapable), mark
+          this subnode as a loss.
+          E.g. if the grid is XX0
+                              ...
+                              ...
+          all next nodes EXCEPT the one for choosing the center cell should be
+          marked as losses.
+
+          If the move AFTER the next move is player's, AND it's marked as a
+          loss, mark this next node as a loss so it isn't chosen by the AI.
+        */
+        if( this.Next[i].CheckForLossNextMove() ) {
+          console.log( "ChooseMove 2:   Subnode #" + this.Next[i].GetId() +
+                       " has Loss next move" );
+          this.Next[i].SetStatus( LOSS );
+        }
+        else {
+          npoints += this.Next[i].GetNumWins() * 2;
+          this.Next[i].UpdateStatus();  //Update PathComplete
+          let stat = this.Next[i].GetStatus();
+          console.log( "ChooseMove 3:   Subnode #" + this.Next[i].GetId() +
+                       " status is " +
+                       ((stat==WIN)?'W':((stat==LOSS)?'L':(stat==TIE)?'T':
+                         (stat==MIXED)?'M':'?')) );
+          if( ! this.Next[i].IsPathComplete() ||
+              this.Next[i].GetStatus() == MIXED ) {
+            npoints++;   //Add 1 pt for just having incomplete path
+            npoints += this.Next[i].GetNumUntriedPaths();
+          }
+        }
+      }
+
+      //Randomly choose a 'best' move (one with max wins, or untried).
+      let c;
+      if( npoints > 0 ) {
+        c = Math.ceil( Math.random() * npoints ); 
+        console.log( "ChooseMove 4:   c=" + c );
+        for( let i = 0; i < this.Next.length && c > 0; i++ ) {
+          c -= this.Next[i].GetNumWins() * 2;
+          console.log( "ChooseMove 4.5:   c=" + c );
+          //Note that a node path is marked complete if it is a loss, even if
+          //there are untried spaces.
+          if( ! this.Next[i].IsPathComplete() ||
+              this.Next[i].GetStatus() == MIXED )
+            c -= this.Next[i].GetNumUntriedPaths() + 1;
+          if( c <= 0 ) {
+            New_pNode = this.Next[i];
+            console.log( "ChooseMove 5:   New_pNode is Node #" +
+                         New_pNode.GetId() );            
+          }
+        }
+        console.log( "ChooseMove 6:   Chose Subnode #" + New_pNode.GetId() );
+      }
+      else { //no points -- that is, no winning paths; look for ties
+        for( let i = 0; i < this.Next.length; i++ )
+          npoints += this.Next[i].GetNumTies();
+
+        if( npoints > 0 ) {
+          c = Math.ceil( Math.random() * npoints );
+          for( let i = 0; i < this.Next.length && c > 0; i++ ) {
+            c -= this.Next[i].GetNumTies();
+            if( c <= 0 )
+              New_pNode = this.Next[i];
+          }
+        }
+        else {  //No ties either; choose move at random
+          c = Math.ceil( Math.random() * (this.Next.length) );
+          if( c < this.Next.length )
+            New_pNode = this.Next[ c ];
+        }
+        console.log( "ChooseMove 7:   No winning paths. Chose Subnode #" +
+                     New_pNode.GetId() );
+      }
+
+      if( New_pNode == null ) {  //Choose an untried path
+        let new_grid =[];
+        for( let i = 0; i < this.Size; i++ ) {
+          if( this.Grid[i] == BLANK ) {
+            //Check against subpaths seen so far to see if this one has been
+            //done before.
+            let already_tried = false;
+            for( let j = 0; j < this.Next.length && ! already_tried; j++ )
+              if( this.Next[j].GetCellContent(i) != BLANK )
+                already_tried = true;
+
+            if( ! already_tried ) {
+              if( --c == 0 )
+                new_grid[i] = Marker;
+              else new_grid[i] = this.Grid[i];
+            }
+            else new_grid[i] = this.Grid[i];
+          }
+          else new_grid[i] = this.Grid[i];
+        }
+
+        New_pNode = this.AddAsChildNode( new_grid, this.Size );
+        console.log( "ChooseMove 8:   Chose untried path: " +
+                     PrintGrid(new_grid, this.Size) );
+      }
+
+      return New_pNode;
+    } //Node.prototype.ChooseMove
+
+    //-------------------------------------------------------------------------
+    Node.prototype.GetNumTies = function() { return this.NTies; }
+
+    //-------------------------------------------------------------------------
+    Node.prototype.GetNumWins = function() { return this.NWins; }
+
+    //-------------------------------------------------------------------------
+    Node.prototype.CheckForLossNextMove = function() {
+      for( let i = 0; i < this.Next.length; i++ ) {
+        if( this.Next[i].GetStatus() == LOSS )
+          return true;
+      }
+
+      return false;
+    } //Node.prototype.CheckForLossNextMove
+
+    //-------------------------------------------------------------------------
+    Node.prototype.GetStatus = function() { return this.Status; }
+
+    //-------------------------------------------------------------------------
+    Node.prototype.IsPathComplete = function() { return this.PathComplete; }
+
+    //-------------------------------------------------------------------------
+    Node.prototype.GetNumUntriedPaths = function() { return this.NUntried; }
+
+    //-------------------------------------------------------------------------
+    Node.prototype.GetCellContent = function( index )
+      { return this.Grid[index]; }
+
+    //-------------------------------------------------------------------------
+    function PrintGrid( Grid, Size ) {
+      let line = '';
+      for( let i = 0; i < Size; i++ )
+        line += Grid[i];
+    
+      return line;
+    } //PrintGrid
+
+    //-------------------------------------------------------------------------
+    function ShowGrid() {
+      let side_len = Math.sqrt( GRID_SIZE );
+      console.log( "ShowGrid 1: side_len=" + side_len );
+
+      for( let i = 0; i < side_len; i++ ) {
+        for( let j = 0; j < side_len; j++ ) {
+          let cell_name = "cell_" + i + '' + j;
+          let cell = document.getElementById( cell_name );
+          let index = i * side_len + j;
+          console.log( "ShowGrid 2: i=" + i + " j=" + j + " index=" + index +
+                       " Grid[" + index + "]=" + Grid[index] );
+          if( Grid[index] == SIDE1 ) {
+            cell.innerHTML = SIDE1;
+            cell.className = "Side1";
+          }
+          else if( Grid[index] == SIDE2 ) {
+            cell.innerHTML = SIDE2;
+            cell.className = "Side2";
+          }
+        }
+      }
+      console.log( "ShowGrid 3" );
+    } //ShowGrid
+
+    //-------------------------------------------------------------------------
+    function DisplayWinningSlash( WinType, Side ) {
+      console.log( "DisplayWinningSlash 1" );
+      if( Side == SIDE1 )
+        SlashDiv.classList.add( "Slash_Side1" );
+      else
+        SlashDiv.classList.add( "Slash_Side2" );
+
+      if( WinType > 0 && WinType <= 3 ) {
+        SlashDiv.classList.add( "Slash_Row" );
+        let y_pos = 105 * ( WinType - 1 ) - 165;
+        console.log( "DisplayWinningSlash 2: y_pos=" + y_pos + "%" );
+        SlashDiv.style.top = y_pos + "%";
+      }
+      else if( WinType > 3 && WinType <= 6 ) {
+        let x_pos = 105 * ( WinType - 4 ) - 162;
+        console.log( "DisplayWinningSlash 3: x_pos=" + x_pos + "%" );
+        SlashDiv.style.left = x_pos + "%";
+      }
+      else if( WinType == 7 ) {
+        SlashDiv.classList.add( "Slash_Diag1" );
+      }
+      else if( WinType == 8 ) {
+        SlashDiv.classList.add( "Slash_Diag2" );
+      }
+
+      console.log( "DisplayWinningSlash 4: top=" + SlashDiv.style.top +
+                   " left=" + SlashDiv.style.left );
+
+      //The Slash div has to be in the last table cell, so all other cells
+      // (including X's & O's in those cells) get drawn *below* the slash.
+      document.getElementById("cell_22" ).appendChild( SlashDiv );
+      SlashDiv.style.display = "block";
+    } //DisplayWinningSlash
+
+    //-------------------------------------------------------------------------
+    function UpdateScoreboard() {
+      document.getElementById( "games_played" ).innerHTML = NGamesPlayed;
+      document.getElementById( "player_score" ).innerHTML = PlayerScore;
+      document.getElementById( "computer_score" ).innerHTML = ComputerScore;
+    } //UpdateScoreboard
+
+    //-------------------------------------------------------------------------
+    function ResetScores() {
+      NGamesPlayed = PlayerScore = ComputerScore = 0;
+      UpdateScoreboard();
+      ResetBoard();
+    } //ResetScores
+
+    //-------------------------------------------------------------------------
+    function PlayAgain() {
+      PlayersTurn = true;
+      Side1Won = Side2Won = false;
+      ResetBoard();
+    } //ResetScores
+
+    //-------------------------------------------------------------------------
+    function SetMessage( Msg ) {
+      document.getElementById( "messages" ).innerHTML = Msg;
+    } //SetMessage
+
+    //-------------------------------------------------------------------------
+    function ShowButtons() {
+      document.getElementById( "play_again_btn" ).style.display = "inline-block";
+      document.getElementById( "reset_scores_btn" ).style.display = "inline-block";
+    } //ShowButtons
+
+    //-------------------------------------------------------------------------
+    function HideButtons() {
+      document.getElementById( "play_again_btn" ).style.display = "none";
+      document.getElementById( "reset_scores_btn" ).style.display = "none";
+    } //HideButtons
+
+    //-------------------------------------------------------------------------
+    function ResetBoard() {
+      Turn = 0;
+      CurrState = Root;
+      PrevState = Root;
+
+      //Set up grid.
+      for( let i = 0; i < GRID_SIZE; i++ )
+        Grid[i] = BLANK;
+
+      let side_len = Math.sqrt( GRID_SIZE );
+
+      for( let i = 0; i < side_len; i++ ) {
+        for( let j = 0; j < side_len; j++ ) {
+          let cell_name = "cell_" + i + '' + j;
+          let cell = document.getElementById( cell_name );
+          let index = i * side_len + j;
+          console.log( cell_name +": [" + cell.innerHTML + "]" );
+          cell.innerHTML = "&nbsp;";
+          cell.className = "";
+          cell.addEventListener( "click", function() { ProcessMove(this); } );
+        }
+      }
+
+      //(Re)Create slash element.
+      //It has to be in the last table cell, so all other cells (including
+      //X's & O's in those cells) get drawn *below* the slash.
+      if( SlashDiv ) SlashDiv.remove();
+      SlashDiv = document.createElement( "DIV" );
+      SlashDiv.className = "Slash";
+
+    } //ResetBoard
+
+  </script>
+</head>
+<body>
+  <div id="header">
+    <h2>AI Tic-Tac-Toe</h2>
+  </div>
+  <div id="board_area">
+    <table id="board">
+      <tr>
+        <td><div id="cell_00">&nbsp;</div></td>
+        <td><div id="cell_01">&nbsp;</div></td>
+        <td><div id="cell_02">&nbsp;</div></td>
+      </tr>
+      <tr>
+        <td><div id="cell_10">&nbsp;</div></td>
+        <td><div id="cell_11">&nbsp;</div></td>
+        <td><div id="cell_12">&nbsp;</div></td>
+      </tr>
+      <tr>
+        <td><div id="cell_20">&nbsp;</div></td>
+        <td><div id="cell_21">&nbsp;</div></td>
+        <td><div id="cell_22">&nbsp;</div></td>
+      </tr>
+    </table>
+  </div>
+  <div id="messages">
+  </div>
+  <div id="btns">
+    <input type="button" value="Play Again?" id="play_again_btn" class="btn"
+           onclick="PlayAgain();" />
+    <input type="button" value="Reset Scores" id="reset_scores_btn" class="btn"
+           onclick="ResetScores();" />
+  </div>
+  <table id="scoreboard">
+    <tr>
+      <td colspan="2">Score</td>
+      <td rowspan="2">
+        Games Played:
+        <div id="games_played" class="score">&nbsp;</div>
+      </td>
+    </tr>
+    <tr>
+      <td>
+        You:
+        <div id="player_score" class="score">&nbsp;</div>
+      </td>
+      <td>
+        Computer:
+        <div id="computer_score" class="score">&nbsp;</div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
